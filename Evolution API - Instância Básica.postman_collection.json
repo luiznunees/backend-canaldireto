@@ -1,0 +1,138 @@
+{
+	"info": {
+		"_postman_id": "a11bcdd8-5407-439b-980b-2284f1aff0a5",
+		"name": "Evolution API | Instância Básica",
+		"description": "Coleção simplificada da Evolution API com as rotas principais de instância.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "49551686",
+		"_collection_link": "https://luiznunees-8701334.postman.co/workspace/luis's-Workspace~bda13b58-4aef-45a2-86d4-167520b553df/collection/49551686-a11bcdd8-5407-439b-980b-2284f1aff0a5?action=share&source=collection_link&creator=49551686"
+	},
+	"item": [
+		{
+			"name": "Criar Instância",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "apikey",
+						"value": "{{globalApikey}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"instanceName\": \"{{instance}}\",\n  \"qrcode\": true,\n  \"integration\": \"WHATSAPP-BAILEYS\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/instance/create",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"instance",
+						"create"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Obter QR",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/instance/connect/{{instance}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"instance",
+						"connect",
+						"{{instance}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Logout",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/instance/logout/{{instance}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"instance",
+						"logout",
+						"{{instance}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/instance/connectionState/{{instance}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"instance",
+						"connectionState",
+						"{{instance}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Deletar Instância",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "apikey",
+						"value": "{{globalApikey}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/instance/delete/{{instance}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"instance",
+						"delete",
+						"{{instance}}"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://api.seuservidor.com"
+		},
+		{
+			"key": "instance",
+			"value": "minha-instancia"
+		},
+		{
+			"key": "globalApikey",
+			"value": "SUA_CHAVE_AQUI"
+		}
+	]
+}
