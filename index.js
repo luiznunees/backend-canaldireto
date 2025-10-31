@@ -517,3 +517,5 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   logger.info(`Servidor rodando na porta ${PORT}`);
 });
+
+module.exports = app; // Adicionado para compatibilidade com Vercel
