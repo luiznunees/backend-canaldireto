@@ -1,0 +1,383 @@
+{
+	"info": {
+		"_postman_id": "a8a3c1b9-e3e8-4f3b-9b1e-2c1d4f5c6b7a",
+		"name": "Canal Direto - API",
+		"description": "Coleção de endpoints para a API Canal Direto, focada no gerenciamento de instâncias WhatsApp e disparo de campanhas.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "WhatsApp Management",
+			"description": "Endpoints para criar, conectar e gerenciar instâncias do WhatsApp.",
+			"item": [
+				{
+					"name": "[POST] Setup Instance",
+					"description": "**Objetivo:** Criar uma nova instância do WhatsApp ou obter o status de uma existente.\n\n**Como funciona:**\n1.  Verifica se já existe uma instância ativa para o `user_id`.\n2.  **Se não existe:** Cria uma nova instância na Evolution API, salva no Supabase e retorna um QR Code para conexão.\n3.  **Se já existe:** Sincroniza o status. Se estiver desconectada, retorna um novo QR Code. Se estiver conectada, apenas informa o status.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/whatsapp/setup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"whatsapp",
+								"setup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[GET] Sync Status",
+					"description": "**Objetivo:** Forçar a sincronização de status da instância e obter os dados mais recentes.\n\n**Como funciona:**\n1.  Busca a instância do `user_id` no Supabase.\n2.  Consulta o status real na Evolution API.\n3.  Atualiza o banco de dados com o status correto (`connected`, `disconnected`, `connecting`).\n4.  Se a instância estiver conectada, busca e salva o nome e a foto do perfil.\n5.  Se estiver desconectada, busca um novo QR Code.\n6.  Retorna todos os dados atualizados.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/whatsapp/sync-status/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"whatsapp",
+								"sync-status",
+								"{{user_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[DELETE] Disconnect",
+					"description": "**Objetivo:** Desconectar uma instância do WhatsApp (logout).\n\n**Como funciona:**\n*   Envia um comando de logout para a Evolution API.\n*   Atualiza o status da instância no Supabase para `disconnected`.\n*   Limpa os dados de perfil (nome, foto) no banco.\n\n**Importante:** A instância continua existindo, apenas fica offline.",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/whatsapp/disconnect/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"whatsapp",
+								"disconnect",
+								"{{user_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[DELETE] Delete Instance",
+					"description": "**Objetivo:** Deletar completamente uma instância do WhatsApp.\n\n**Como funciona:**\n*   Envia um comando para deletar a instância na Evolution API.\n*   Marca a instância como inativa no Supabase (`is_active: false`). Isso é um \"soft delete\" para manter o histórico.",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/whatsapp/delete/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"whatsapp",
+								"delete",
+								"{{user_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Disparos de Campanhas",
+			"item": [
+				{
+					"name": "[POST] Criar Campanha",
+					"description": "**Objetivo:** Criar uma nova campanha de disparos.\n\n**Pré-requisito:** O `user_id` fornecido deve ter uma instância do WhatsApp com status `connected`.\n\n**Corpo da Requisição:**\n*   `user_id`: ID do usuário.\n*   `campanha`: Detalhes da mensagem.\n*   `contatos`: Lista de números para envio.\n*   `config_envio`: Parâmetros de velocidade e pausa dos envios.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"campanha\": {\n        \"tipo\": \"texto\",\n        \"nome\": \"Campanha de Teste via Postman\",\n        \"mensagem\": \"Olá, [nome]! Esta é uma mensagem de teste.\",\n        \"url_anexo\": null\n    },\n    \"contatos\": {\n        \"origem\": \"manual\",\n        \"dados\": [\n            \"5551980985330\",\n            \"5551999999999\"\n        ]\n    },\n    \"config_envio\": {\n        \"lote\": 10,\n        \"atraso_lote\": 60,\n        \"atraso_msg\": 10\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/disparos/criar-campanha",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"disparos",
+								"criar-campanha"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST] Começar Campanha",
+					"description": "Inicia (ou resume) o envio de uma campanha que foi criada ou pausada.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"campanha_id\": 123\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/disparos/comecar-campanha",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"disparos",
+								"comecar-campanha"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST] Pausar Campanha",
+					"description": "Pausa o envio de uma campanha em andamento.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"campanha_id\": 123\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/disparos/pausar-campanha",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"disparos",
+								"pausar-campanha"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Gerenciamento de Arquivos",
+			"item": [
+				{
+					"name": "[POST] Upload de Arquivo",
+					"description": "**Objetivo:** Fazer upload de um arquivo (imagem, vídeo, documento) para ser usado em uma campanha.\n\n**Como usar:**\n1.  No corpo da requisição (Body), selecione `form-data`.\n2.  Preencha o `user_id`.\n3.  No campo `file`, clique em \"Select Files\" e escolha o arquivo do seu computador.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/storage/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"storage",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[GET] Listar Arquivos do Usuário",
+					"description": "Lista os nomes de todos os arquivos que um usuário específico já enviou.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/v1/storage/files/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"storage",
+								"files",
+								"{{user_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Simulação de Webhooks",
+			"item": [
+				{
+					"name": "[POST] Webhook: Conexão Estabelecida",
+					"description": "**Este endpoint é para ser chamado pela Evolution API, não por um usuário.**\n\nSimula o evento que a Evolution API envia quando uma instância é conectada com sucesso (após escanear o QR Code).\n\n**Importante:** Altere o valor de `instance` para o `nome_instancia` que você está testando.",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"connection.update\",\n  \"instance\": \"5551980985330_1234\",\n  \"data\": {\n    \"state\": \"open\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/webhooks/whatsapp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"webhooks",
+								"whatsapp"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST] Webhook: QR Code Atualizado",
+					"description": "**Este endpoint é para ser chamado pela Evolution API, não por um usuário.**\n\nSimula o evento que a Evolution API envia quando um novo QR Code é gerado.\n\n**Importante:** Altere o valor de `instance` para o `nome_instancia` que você está testando.",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event\": \"qrcode.updated\",\n  \"instance\": \"5551980985330_1234\",\n  \"data\": {\n    \"qrcode\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/webhooks/whatsapp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"webhooks",
+								"whatsapp"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000"
+		},
+		{
+			"key": "api_key",
+			"value": "f312085c64d080c31e32cf1b8b291db7410821ed755e93691f39f34232594d6a"
+		},
+		{
+			"key": "user_id",
+			"value": "25c2c83c-9a91-4114-a5c3-212c125c0982"
+		}
+	]
+}

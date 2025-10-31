@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./logger');
 const errorHandler = require('./errorMiddleware');
 const cors = require('cors');
+const supabase = require('./config/supabase'); // Importar Supabase
 
 const app = express();
 
@@ -332,10 +333,37 @@ app.get('/v1/storage/files/:user_id/:filename', authenticate, async (req, res, n
  *         description: Erro interno no servidor
  */
 app.post('/v1/disparos/criar-campanha', authenticate, async (req, res, next) => {
+  const { user_id } = req.body;
+
   try {
+    // Verificar se WhatsApp está conectado
+    const { data: whatsappInstance, error: dbError } = await supabase
+      .from('whatsapp')
+      .select('status')
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (dbError) {
+        logger.error(`Erro ao verificar status do whatsapp para user_id ${user_id}:`, dbError);
+        throw new Error(dbError.message);
+    }
+
+    if (!whatsappInstance || whatsappInstance.status !== 'connected') {
+      logger.warn(`Tentativa de criar campanha sem WhatsApp conectado para user_id: ${user_id}`);
+      return res.status(403).json({
+        success: false,
+        error: 'WhatsApp não conectado',
+        message: 'Conecte seu WhatsApp antes de criar campanhas.',
+        code: 'WHATSAPP_NOT_CONNECTED'
+      });
+    }
+
+    // Se conectado, prossegue para o n8n
     const response = await axios.post(`${N8N_BASE_URL}/webhook/criar-campanha`, req.body);
     res.status(response.status).send(response.data);
   } catch (error) {
+    logger.error(`Erro ao criar campanha para user_id ${user_id}:`, error);
     next(error); // Passa o erro para o middleware de tratamento de erros
   }
 });
@@ -407,6 +435,79 @@ app.post('/v1/disparos/pausar-campanha', authenticate, async (req, res, next) =>
     res.status(response.status).send(response.data);
   } catch (error) {
     next(error); // Passa o erro para o middleware de tratamento de erros
+  }
+});
+
+// Webhook para receber atualizações da Evolution API (sem autenticação de API Key)
+app.post('/v1/webhooks/whatsapp', async (req, res) => {
+  const { event, instance, data } = req.body;
+
+  logger.info(`[WEBHOOK] Recebido evento '${event}' para a instância '${instance}'`);
+
+  try {
+    const { data: whatsappInstance, error: findError } = await supabase
+      .from('whatsapp')
+      .select('id, status')
+      .eq('nome_instancia', instance)
+      .single();
+
+    if (findError || !whatsappInstance) {
+      logger.warn(`[WEBHOOK] Instância '${instance}' não encontrada no Supabase.`);
+      return res.status(404).json({ success: false, error: 'Instância não encontrada' });
+    }
+
+    let updateData = {};
+    let logMessage = '';
+
+    switch (event) {
+      case 'connection.update':
+        const newStatus = data.state === 'open' ? 'connected'
+                        : data.state === 'connecting' ? 'connecting'
+                        : 'disconnected';
+        
+        if (whatsappInstance.status !== newStatus) {
+            updateData = {
+                status: newStatus,
+                atualizado_em: new Date().toISOString(),
+                ...(newStatus === 'connected' && { last_connection_at: new Date().toISOString(), connection_attempts: 0 })
+            };
+            logMessage = `Status atualizado para: ${newStatus}`;
+        }
+        break;
+
+      case 'qrcode.updated':
+        if (data.qrcode) {
+          updateData = {
+            qr_code: data.qrcode,
+            atualizado_em: new Date().toISOString()
+          };
+          logMessage = 'QR Code atualizado no banco de dados.';
+        }
+        break;
+
+      default:
+        logger.info(`[WEBHOOK] Evento não tratado: ${event}`);
+        return res.json({ success: true, message: 'Evento não tratado' });
+    }
+
+    if (Object.keys(updateData).length > 0) {
+        const { error: updateError } = await supabase
+            .from('whatsapp')
+            .update(updateData)
+            .eq('id', whatsappInstance.id);
+
+        if (updateError) {
+            logger.error(`[WEBHOOK] Erro ao atualizar Supabase para instância ${instance}:`, updateError);
+            return res.status(500).json({ success: false, error: 'Erro ao atualizar dados' });
+        }
+        logger.info(`[WEBHOOK] ${logMessage}`);
+    }
+
+    res.json({ success: true, message: 'Webhook processado com sucesso' });
+
+  } catch (error) {
+    logger.error(`[WEBHOOK] Erro fatal no processamento do webhook para instância ${instance}:`, error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
