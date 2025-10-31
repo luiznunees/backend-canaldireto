@@ -41,6 +41,12 @@ app.use(morgan('combined', { stream: morganStream }));
 app.use(helmet()); // Usar Helmet para segurança
 app.use(apiLimiter); // Aplicar rate limiting a todas as requisições
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'online',
+  });
+});
+
 // Rotas versionadas com /v1
 app.use('/v1/whatsapp', authenticate, instanceRoutes);
 

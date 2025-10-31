@@ -261,101 +261,108 @@ router.post('/setup', async (req, res) => {
  */
 router.get('/sync-status/:user_id', async (req, res) => {
     const { user_id } = req.params;
-  
+
     try {
-      const { data: instance, error } = await supabase
-        .from('whatsapp')
-        .select('*')
-        .eq('user_id', user_id)
-        .eq('is_active', true)
-        .maybeSingle();
-  
-      if (error || !instance) {
-        return res.status(404).json({
-          success: false,
-          hasInstance: false,
-          message: 'Nenhuma instância encontrada para este usuário'
+        const { data: instance, error } = await supabase
+            .from('whatsapp')
+            .select('*')
+            .eq('user_id', user_id)
+            .eq('is_active', true)
+            .maybeSingle();
+
+        if (error || !instance) {
+            return res.status(404).json({
+                success: false,
+                hasInstance: false,
+                message: 'Nenhuma instância encontrada para este usuário'
+            });
+        }
+
+        let evolutionStatus = 'close';
+        let profileData = null;
+        let mappedStatus = 'disconnected';
+
+        // Polling para verificar o status da conexão
+        for (let i = 0; i < 5; i++) { // Tenta 5 vezes
+            try {
+                const statusResponse = await axios.get(
+                    `${EVOLUTION_API_URL}/instance/connectionState/${instance.nome_instancia}`,
+                    { headers: { 'apikey': EVOLUTION_API_KEY }, timeout: 8000 }
+                );
+                evolutionStatus = statusResponse.data?.instance?.state || 'close';
+
+                if (evolutionStatus === 'open') {
+                    const profileResponse = await axios.get(
+                        `${EVOLUTION_API_URL}/instance/fetchProfile/${instance.nome_instancia}`,
+                        { headers: { 'apikey': EVOLUTION_API_KEY }, timeout: 8000 }
+                    );
+                    profileData = profileResponse.data;
+                    mappedStatus = 'connected';
+                    break; // Sai do loop se conectado
+                }
+            } catch (apiError) {
+                logger.error(`Erro ao consultar Evolution API para ${instance.nome_instancia}:`, apiError.message);
+                evolutionStatus = 'close';
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Espera 2 segundos
+        }
+
+        const oldStatus = instance.status;
+        mappedStatus = evolutionStatus === 'open' ? 'connected'
+            : evolutionStatus === 'connecting' ? 'connecting'
+                : 'disconnected';
+
+        const updateData = {
+            status: mappedStatus,
+            atualizado_em: new Date().toISOString(),
+            connection_attempts: mappedStatus === 'disconnected' ? (instance.connection_attempts || 0) + 1 : 0,
+            last_connection_at: mappedStatus === 'connected' ? new Date().toISOString() : instance.last_connection_at,
+            profile_name: profileData?.name || null,
+            profile_picture_url: profileData?.profilePictureUrl || null,
+        };
+
+        const { data: updatedInstance, error: updateError } = await supabase
+            .from('whatsapp')
+            .update(updateData)
+            .eq('id', instance.id)
+            .select()
+            .single();
+
+        if (updateError) {
+            logger.error(`Erro ao atualizar Supabase para instância ${instance.id}:`, updateError);
+        }
+
+        let qrCode = null;
+        if (mappedStatus === 'disconnected') {
+            try {
+                const qrResponse = await axios.get(
+                    `${EVOLUTION_API_URL}/instance/connect/${instance.nome_instancia}`,
+                    { headers: { 'apikey': EVOLUTION_API_KEY } }
+                );
+                qrCode = qrResponse.data?.base64 || qrResponse.data?.qrcode?.base64;
+                if (qrCode) {
+                    await supabase.from('whatsapp').update({ qr_code: qrCode }).eq('id', instance.id);
+                }
+            } catch (qrError) {
+                logger.error(`Erro ao obter novo QR Code para ${instance.nome_instancia}:`, qrError.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            hasInstance: true,
+            instance: updatedInstance || { ...instance, ...updateData },
+            qrcode: qrCode,
+            statusChanged: oldStatus !== mappedStatus
         });
-      }
-  
-      let evolutionStatus = 'close';
-      let profileData = null;
-  
-      try {
-        const statusResponse = await axios.get(
-          `${EVOLUTION_API_URL}/instance/connectionState/${instance.nome_instancia}`,
-          { headers: { 'apikey': EVOLUTION_API_KEY }, timeout: 8000 }
-        );
-        evolutionStatus = statusResponse.data?.instance?.state || 'close';
-  
-        if (evolutionStatus === 'open') {
-          const profileResponse = await axios.get(
-            `${EVOLUTION_API_URL}/instance/fetchProfile/${instance.nome_instancia}`,
-            { headers: { 'apikey': EVOLUTION_API_KEY }, timeout: 8000 }
-          );
-          profileData = profileResponse.data;
-        }
-      } catch (apiError) {
-        logger.error(`Erro ao consultar Evolution API para ${instance.nome_instancia}:`, apiError.message);
-        evolutionStatus = 'close';
-      }
-  
-      const oldStatus = instance.status;
-      const mappedStatus = evolutionStatus === 'open' ? 'connected'
-                         : evolutionStatus === 'connecting' ? 'connecting'
-                         : 'disconnected';
-  
-      const updateData = {
-        status: mappedStatus,
-        atualizado_em: new Date().toISOString(),
-        connection_attempts: mappedStatus === 'disconnected' ? (instance.connection_attempts || 0) + 1 : 0,
-        last_connection_at: mappedStatus === 'connected' ? new Date().toISOString() : instance.last_connection_at,
-        profile_name: profileData?.name || null,
-        profile_picture_url: profileData?.profilePictureUrl || null,
-      };
-  
-      const { data: updatedInstance, error: updateError } = await supabase
-        .from('whatsapp')
-        .update(updateData)
-        .eq('id', instance.id)
-        .select()
-        .single();
-  
-      if (updateError) {
-        logger.error(`Erro ao atualizar Supabase para instância ${instance.id}:`, updateError);
-      }
-  
-      let qrCode = null;
-      if (mappedStatus === 'disconnected') {
-        try {
-          const qrResponse = await axios.get(
-            `${EVOLUTION_API_URL}/instance/connect/${instance.nome_instancia}`,
-            { headers: { 'apikey': EVOLUTION_API_KEY } }
-          );
-          qrCode = qrResponse.data?.base64 || qrResponse.data?.qrcode?.base64;
-          if (qrCode) {
-            await supabase.from('whatsapp').update({ qr_code: qrCode }).eq('id', instance.id);
-          }
-        } catch (qrError) {
-          logger.error(`Erro ao obter novo QR Code para ${instance.nome_instancia}:`, qrError.message);
-        }
-      }
-  
-      res.json({
-        success: true,
-        hasInstance: true,
-        instance: updatedInstance || { ...instance, ...updateData },
-        qrcode: qrCode,
-        statusChanged: oldStatus !== mappedStatus
-      });
-  
+
     } catch (error) {
-      logger.error(`Erro em /sync-status para user_id ${user_id}:`, error);
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao sincronizar status',
-        details: error.message
-      });
+        logger.error(`Erro em /sync-status para user_id ${user_id}:`, error);
+        res.status(500).json({
+            success: false,
+            error: 'Erro ao sincronizar status',
+            details: error.message
+        });
     }
 });
 
